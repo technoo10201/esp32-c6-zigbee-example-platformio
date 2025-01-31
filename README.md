@@ -61,7 +61,7 @@ pio device monitor
 
 Once the code is flashed, the ESP32-C6 should be discovered as a Zigbee light bulb in your Zigbee network.
 You can use a Zigbee control application (such as Zigbee2MQTT or a compatible app) to interact with the light bulb.
-Example Code
+
 
 The main code is located in src/main.cpp. It implements a basic Zigbee light bulb with the following features:
 
