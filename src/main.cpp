@@ -13,9 +13,10 @@
 // limitations under the License.
 
 /**
- * @brief This example demonstrates simple Zigbee light bulb.
+ * @brief This example demonstrates Zigbee Color Dimmable light bulb.
  *
- * The example demonstrates how to use Zigbee library to create a end device light bulb.
+ * The example demonstrates how to use Zigbee library to create an end device with
+ * color dimmable light end point.
  * The light bulb is a Zigbee end device, which is controlled by a Zigbee coordinator.
  *
  * Proper Zigbee mode must be selected in Tools->Zigbee mode
@@ -26,76 +27,97 @@
  * Created by Jan Procházka (https://github.com/P-R-O-C-H-Y/)
  */
 
-#ifndef ZIGBEE_MODE_ED
-#error "Zigbee end device mode is not selected in Tools->Zigbee mode"
-#endif
-
-#include "Zigbee.h"
-
-/* Zigbee light bulb configuration */
-#define ZIGBEE_LIGHT_ENDPOINT 10
-uint8_t led = RGB_BUILTIN;
-uint8_t button = BOOT_PIN;
-
-ZigbeeLight zbLight = ZigbeeLight(ZIGBEE_LIGHT_ENDPOINT);
-
-/********************* RGB LED functions **************************/
-void setLED(bool value) {
-  digitalWrite(led, value);
-}
-
-/********************* Arduino functions **************************/
-void setup() {
-  Serial.begin(115200);
-
-  // Init LED and turn it OFF (if LED_PIN == RGB_BUILTIN, the rgbLedWrite() will be used under the hood)
-  pinMode(led, OUTPUT);
-  digitalWrite(led, LOW);
-
-  // Init button for factory reset
-  pinMode(button, INPUT_PULLUP);
-
-  //Optional: set Zigbee device name and model
-  zbLight.setManufacturerAndModel("Espressif", "ZBLightBulb");
-
-  // Set callback function for light change
-  zbLight.onLightChange(setLED);
-
-  //Add endpoint to Zigbee Core
-  Serial.println("Adding ZigbeeLight endpoint to Zigbee Core");
-  Zigbee.addEndpoint(&zbLight);
-
-  // When all EPs are registered, start Zigbee. By default acts as ZIGBEE_END_DEVICE
-  if (!Zigbee.begin()) {
-    Serial.println("Zigbee failed to start!");
-    Serial.println("Rebooting...");
-    ESP.restart();
-  }
-  Serial.println("Connecting to network");
-  while (!Zigbee.connected()) {
-    Serial.print(".");
-    delay(100);
-  }
-  Serial.println();
-}
-
-void loop() {
-  // Checking button for factory reset
-  if (digitalRead(button) == LOW) {  // Push button pressed
-    // Key debounce handling
-    delay(100);
-    int startTime = millis();
-    while (digitalRead(button) == LOW) {
-      delay(50);
-      if ((millis() - startTime) > 3000) {
-        // If key pressed for more than 3secs, factory reset Zigbee and reboot
-        Serial.println("Resetting Zigbee to factory and rebooting in 1s.");
-        delay(1000);
-        Zigbee.factoryReset();
-      }
-    }
-    // Toggle light by pressing the button
-    zbLight.setLight(!zbLight.getLightState());
-  }
-  delay(100);
-}
+ #ifndef ZIGBEE_MODE_ED
+ #error "Zigbee end device mode is not selected in Tools->Zigbee mode"
+ #endif
+ 
+ #include "Zigbee.h"
+ 
+ /* Zigbee color dimmable light configuration */
+ #define ZIGBEE_RGB_LIGHT_ENDPOINT 10
+ uint8_t led = RGB_BUILTIN;
+ uint8_t button = BOOT_PIN;
+ 
+ ZigbeeColorDimmableLight zbColorLight = ZigbeeColorDimmableLight(ZIGBEE_RGB_LIGHT_ENDPOINT);
+ 
+ /********************* RGB LED functions **************************/
+ void setRGBLight(bool state, uint8_t red, uint8_t green, uint8_t blue, uint8_t level) {
+   if (!state) {
+     rgbLedWrite(led, 0, 0, 0);
+     return;
+   }
+   float brightness = (float)level / 255;
+   rgbLedWrite(led, red * brightness, green * brightness, blue * brightness);
+ }
+ 
+ // Create a task on identify call to handle the identify function
+ void identify(uint16_t time) {
+   static uint8_t blink = 1;
+   log_d("Identify called for %d seconds", time);
+   if (time == 0) {
+     // If identify time is 0, stop blinking and restore light as it was used for identify
+     zbColorLight.restoreLight();
+     return;
+   }
+   rgbLedWrite(led, 255 * blink, 255 * blink, 255 * blink);
+   blink = !blink;
+ }
+ 
+ /********************* Arduino functions **************************/
+ void setup() {
+   Serial.begin(115200);
+ 
+   // Init RMT and leave light OFF
+   rgbLedWrite(led, 0, 0, 0);
+ 
+   // Init button for factory reset
+   pinMode(button, INPUT_PULLUP);
+ 
+   // Set callback function for light change
+   zbColorLight.onLightChange(setRGBLight);
+ 
+   // Optional: Set callback function for device identify
+   zbColorLight.onIdentify(identify);
+ 
+   // Optional: Set Zigbee device name and model
+   zbColorLight.setManufacturerAndModel("Clem", "ZBColor");
+ 
+   // Add endpoint to Zigbee Core
+   Serial.println("Adding ZigbeeLight endpoint to Zigbee Core");
+   Zigbee.addEndpoint(&zbColorLight);
+ 
+   // When all EPs are registered, start Zigbee in End Device mode
+   if (!Zigbee.begin()) {
+     Serial.println("Zigbee failed to start!");
+     Serial.println("Rebooting...");
+     ESP.restart();
+   }
+   Serial.println("Connecting to network");
+   while (!Zigbee.connected()) {
+     Serial.print(".");
+     delay(100);
+   }
+   Serial.println();
+ }
+ 
+ void loop() {
+   // Checking button for factory reset
+   if (digitalRead(button) == LOW) {  // Push button pressed
+     // Key debounce handling
+     delay(100);
+     int startTime = millis();
+     while (digitalRead(button) == LOW) {
+       delay(50);
+       if ((millis() - startTime) > 3000) {
+         // If key pressed for more than 3secs, factory reset Zigbee and reboot
+         Serial.println("Resetting Zigbee to factory and rebooting in 1s.");
+         delay(1000);
+         Zigbee.factoryReset();
+       }
+     }
+     // Increase blightness by 50 every time the button is pressed
+     zbColorLight.setLightLevel(zbColorLight.getLightLevel() + 50);
+   }
+   delay(100);
+ }
+ 
